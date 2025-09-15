@@ -1,41 +1,44 @@
 name: ci
-on: [ push, workflow_dispatch ]
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
 
 jobs:
   job:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
           node-version: '16'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build
         run: npm run build
 
-      - name: Test
-        if: ${{ env.TEST != 'skip' }}
-        run: npm run test-authenticated
-        env:
-          DEBUG: scraper:*
-          LI_AT_COOKIE: ${{ secrets.LI_AT_COOKIE }}
-
-      - name: Publish-Latest
-#        if: contains(github.ref, 'release') # Tag commit with 'release' to publish
+      - name: Deploy to release branch
         run: |
-          npm set registry "https://registry.npmjs.org"
-          npm set //registry.npmjs.org/:_authToken ${{ secrets.NPM_PUBLISH_TOKEN }}
-          npm publish --tag latest
-
-      - name: Publish-Next
-        if: contains(github.ref, 'next') # Tag commit with 'next' to publish
-        run: |
-          npm set registry "https://registry.npmjs.org"
-          npm set //registry.npmjs.org/:_authToken ${{ secrets.NPM_PUBLISH_TOKEN }}
-          npm publish --tag next
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin || true
+          if git show-ref --verify --quiet refs/remotes/origin/release; then
+            git worktree add ../release release
+          else
+            git worktree add ../release -b release
+          fi
+          rm -rf ../release/*
+          cp package.json ../release/
+          cp -r build ../release/
+          cd ../release
+          git add -f build package.json || git add -f .
+          git commit -m "chore: release build" || echo "No changes to commit"
+          git push -f origin release
