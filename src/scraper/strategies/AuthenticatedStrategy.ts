@@ -31,6 +31,7 @@ export const selectors = {
     paginationNextBtn: 'li[data-test-pagination-page-btn].selected + li',
     paginationBtn: (index: number) => `li[data-test-pagination-page-btn="${index}"] button`,
     requiredSkills: '.job-details-how-you-match__skills-item-subtitle',
+    applyLinkModal: 'div[role="dialog"]',
 };
 
 /**
@@ -292,7 +293,7 @@ export class AuthenticatedStrategy extends RunStrategy {
         try {
             logger.debug(tag, 'Try extracting apply link');
             const currentUrl = page.url();
-            const elapsed = 0;
+            let elapsed = 0;
             const sleepTimeMs = 100;
 
             if (await page.evaluate((applyBtnSelector: string) => {
@@ -306,7 +307,14 @@ export class AuthenticatedStrategy extends RunStrategy {
                 return false;
             }, selectors.applyBtn)) {
 
-                while (elapsed < timeout) {
+                while (elapsed < timeout * 1000) {
+                    // Click apply button if a modal is open
+                    const dialog = await page.$(selectors.applyLinkModal);
+                    if (dialog) {
+                        const applyBtn = await dialog.$(selectors.applyBtn);
+                        await applyBtn?.click();
+                    }
+
                     const targetsResponse = await cdpSession.send('Target.getTargets');
 
                     // The first target of type page with a valid url different from main page should be our guy
@@ -320,6 +328,7 @@ export class AuthenticatedStrategy extends RunStrategy {
                     }
 
                     await sleep(sleepTimeMs);
+                    elapsed += sleepTimeMs;
                 }
 
                 return { success: false, error: 'timeout' };
