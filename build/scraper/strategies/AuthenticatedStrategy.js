@@ -157,8 +157,8 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                             const job = document.querySelectorAll(jobsSelector)[jobIndex];
                             const link = job.querySelector(linkSelector);
                             const jobId = job.getAttribute("data-job-id");
-                            if (jobId && ((_b = query.options) === null || _b === void 0 ? void 0 : _b.existingJobId) &&
-                                query.options.existingJobId.includes(jobId)) {
+                            if (jobId && ((_b = query.options) === null || _b === void 0 ? void 0 : _b.existingJobIds) &&
+                                query.options.existingJobIds.includes(jobId)) {
                                 return;
                             }
                             // Click job link and scroll
