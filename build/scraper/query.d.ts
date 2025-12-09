@@ -21,6 +21,7 @@ export interface IQueryOptions {
     applyLink?: boolean;
     skipPromotedJobs?: boolean;
     skills?: boolean;
+    existingJobId?: string[];
 }
 export interface IQueryValidationError {
     param: string;

@@ -153,9 +153,14 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                             exports.selectors.date,
                         ]);
                         const jobFieldsResult = yield page.evaluate((jobsSelector, linkSelector, titleSelector, companySelector, placeSelector, dateSelector, jobIndex) => {
-                            var _b, _c;
+                            var _b, _c, _d;
                             const job = document.querySelectorAll(jobsSelector)[jobIndex];
                             const link = job.querySelector(linkSelector);
+                            const jobId = job.getAttribute("data-job-id");
+                            if (jobId && ((_b = query.options) === null || _b === void 0 ? void 0 : _b.existingJobId) &&
+                                query.options.existingJobId.includes(jobId)) {
+                                return;
+                            }
                             // Click job link and scroll
                             link.scrollIntoView();
                             link.click();
@@ -163,7 +168,6 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                             const protocol = window.location.protocol + "//";
                             const hostname = window.location.hostname;
                             const jobLink = protocol + hostname + link.getAttribute("href");
-                            const jobId = job.getAttribute("data-job-id");
                             let title = job.querySelector(titleSelector) ?
                                 job.querySelector(titleSelector).innerText : "";
                             if (title.includes('\n')) {
@@ -174,7 +178,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                                 let companyElem = job.querySelector(companySelector);
                                 company = companyElem.innerText;
                             }
-                            const companyImgLink = (_c = (_b = job.querySelector("img")) === null || _b === void 0 ? void 0 : _b.getAttribute("src")) !== null && _c !== void 0 ? _c : undefined;
+                            const companyImgLink = (_d = (_c = job.querySelector("img")) === null || _c === void 0 ? void 0 : _c.getAttribute("src")) !== null && _d !== void 0 ? _d : undefined;
                             const place = job.querySelector(placeSelector) ?
                                 job.querySelector(placeSelector).innerText : "";
                             const date = job.querySelector(dateSelector) ?
@@ -192,6 +196,22 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                                 isPromoted,
                             };
                         }, exports.selectors.jobs, exports.selectors.link, exports.selectors.title, exports.selectors.company, exports.selectors.place, exports.selectors.date, jobIndex);
+                        if (!jobFieldsResult) {
+                            jobIndex += 1;
+                            metrics.processed += 1;
+                            if (metrics.processed < query.options.limit && jobIndex === jobsTot && jobsTot < paginationSize) {
+                                const loadJobsResult = yield _a._loadJobs(page, jobsTot);
+                                if (loadJobsResult.success) {
+                                    jobsTot = loadJobsResult.count;
+                                }
+                            }
+                            if (jobIndex === jobsTot) {
+                                break;
+                            }
+                            else {
+                                continue;
+                            }
+                        }
                         jobId = jobFieldsResult.jobId;
                         jobLink = jobFieldsResult.jobLink;
                         jobTitle = jobFieldsResult.title;
