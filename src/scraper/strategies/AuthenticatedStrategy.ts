@@ -414,6 +414,8 @@ export class AuthenticatedStrategy extends RunStrategy {
             return { exit: false };
         }
 
+        const existingJobIdsSet = new Set<string>(query.options?.existingJobIds || []);
+
         // Pagination loop
         while (metrics.processed < query.options!.limit!) {
             // Verify session in the loop
@@ -473,6 +475,40 @@ export class AuthenticatedStrategy extends RunStrategy {
                         selectors.place,
                         selectors.date,
                     ]);
+
+                    const jobProbe = await page.evaluate(
+                        (jobsSelector: string, jobIndex: number) => {
+                            const job = document.querySelectorAll(jobsSelector)[jobIndex];
+                            if (!job) return null;
+                            const jobId = job.getAttribute("data-job-id");
+                            return { jobId };
+                        },
+                        selectors.jobs,
+                        jobIndex
+                    );
+
+                    if (!jobProbe) {
+                        logger.info(tag, 'Job element missing, skip');
+                        jobIndex += 1;
+                        continue;
+                    }
+
+                    if (existingJobIdsSet.has(jobProbe.jobId!)) {
+                        logger.info(tag, 'Skipped because already existing');
+                        metrics.skipped += 1;
+                        jobIndex += 1;
+
+                        if (metrics.processed < query.options!.limit! && jobIndex === jobsTot && jobsTot < paginationSize) {
+                            const loadJobsResult = await AuthenticatedStrategy._loadJobs(page, jobsTot);
+
+                            if (loadJobsResult.success) {
+                                jobsTot = loadJobsResult.count;
+                            }
+                        }
+
+                        if (jobIndex === jobsTot) break;
+                        continue;
+                    }
 
                     const jobFieldsResult = await page.evaluate(
                         (

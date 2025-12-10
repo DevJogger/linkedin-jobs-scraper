@@ -33,6 +33,7 @@ export interface IQueryOptions {
     applyLink?: boolean;
     skipPromotedJobs?: boolean;
     skills?: boolean;
+    existingJobIds?: string[];
 }
 
 export interface IQueryValidationError {
