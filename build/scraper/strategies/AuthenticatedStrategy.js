@@ -59,7 +59,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
          * @param location
          */
         this.run = (browser, page, cdpSession, url, query, location) => __awaiter(this, void 0, void 0, function* () {
-            var _b, _c, _d, _e, _f;
+            var _b, _c, _d, _e, _f, _g;
             let tag = `[${query.query}][${location}]`;
             const metrics = {
                 processed: 0,
@@ -103,6 +103,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                 logger_1.logger.info(tag, `No jobs found, skip`);
                 return { exit: false };
             }
+            const existingJobIdsSet = new Set(((_c = query.options) === null || _c === void 0 ? void 0 : _c.existingJobIds) || []);
             // Pagination loop
             while (metrics.processed < query.options.limit) {
                 // Verify session in the loop
@@ -152,15 +153,36 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                             exports.selectors.place,
                             exports.selectors.date,
                         ]);
+                        const jobProbe = yield page.evaluate((jobsSelector, jobIndex) => {
+                            const job = document.querySelectorAll(jobsSelector)[jobIndex];
+                            if (!job)
+                                return null;
+                            const jobId = job.getAttribute("data-job-id");
+                            return { jobId };
+                        }, exports.selectors.jobs, jobIndex);
+                        if (!jobProbe) {
+                            logger_1.logger.info(tag, 'Job element missing, skip');
+                            jobIndex += 1;
+                            continue;
+                        }
+                        if (existingJobIdsSet.has(jobProbe.jobId)) {
+                            logger_1.logger.info(tag, 'Skipped because already existing');
+                            metrics.skipped += 1;
+                            jobIndex += 1;
+                            if (metrics.processed < query.options.limit && jobIndex === jobsTot && jobsTot < paginationSize) {
+                                const loadJobsResult = yield _a._loadJobs(page, jobsTot);
+                                if (loadJobsResult.success) {
+                                    jobsTot = loadJobsResult.count;
+                                }
+                            }
+                            if (jobIndex === jobsTot)
+                                break;
+                            continue;
+                        }
                         const jobFieldsResult = yield page.evaluate((jobsSelector, linkSelector, titleSelector, companySelector, placeSelector, dateSelector, jobIndex) => {
-                            var _b, _c, _d;
+                            var _b, _c;
                             const job = document.querySelectorAll(jobsSelector)[jobIndex];
                             const link = job.querySelector(linkSelector);
-                            const jobId = job.getAttribute("data-job-id");
-                            if (jobId && ((_b = query.options) === null || _b === void 0 ? void 0 : _b.existingJobIds) &&
-                                query.options.existingJobIds.includes(jobId)) {
-                                return;
-                            }
                             // Click job link and scroll
                             link.scrollIntoView();
                             link.click();
@@ -168,6 +190,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                             const protocol = window.location.protocol + "//";
                             const hostname = window.location.hostname;
                             const jobLink = protocol + hostname + link.getAttribute("href");
+                            const jobId = job.getAttribute("data-job-id");
                             let title = job.querySelector(titleSelector) ?
                                 job.querySelector(titleSelector).innerText : "";
                             if (title.includes('\n')) {
@@ -178,7 +201,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                                 let companyElem = job.querySelector(companySelector);
                                 company = companyElem.innerText;
                             }
-                            const companyImgLink = (_d = (_c = job.querySelector("img")) === null || _c === void 0 ? void 0 : _c.getAttribute("src")) !== null && _d !== void 0 ? _d : undefined;
+                            const companyImgLink = (_c = (_b = job.querySelector("img")) === null || _b === void 0 ? void 0 : _b.getAttribute("src")) !== null && _c !== void 0 ? _c : undefined;
                             const place = job.querySelector(placeSelector) ?
                                 job.querySelector(placeSelector).innerText : "";
                             const date = job.querySelector(dateSelector) ?
@@ -196,22 +219,6 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                                 isPromoted,
                             };
                         }, exports.selectors.jobs, exports.selectors.link, exports.selectors.title, exports.selectors.company, exports.selectors.place, exports.selectors.date, jobIndex);
-                        if (!jobFieldsResult) {
-                            jobIndex += 1;
-                            metrics.processed += 1;
-                            if (metrics.processed < query.options.limit && jobIndex === jobsTot && jobsTot < paginationSize) {
-                                const loadJobsResult = yield _a._loadJobs(page, jobsTot);
-                                if (loadJobsResult.success) {
-                                    jobsTot = loadJobsResult.count;
-                                }
-                            }
-                            if (jobIndex === jobsTot) {
-                                break;
-                            }
-                            else {
-                                continue;
-                            }
-                        }
                         jobId = jobFieldsResult.jobId;
                         jobLink = jobFieldsResult.jobLink;
                         jobTitle = jobFieldsResult.title;
@@ -221,7 +228,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                         jobDate = jobFieldsResult.date;
                         jobIsPromoted = jobFieldsResult.isPromoted;
                         // Promoted job
-                        if (((_c = query.options) === null || _c === void 0 ? void 0 : _c.skipPromotedJobs) && jobIsPromoted) {
+                        if (((_d = query.options) === null || _d === void 0 ? void 0 : _d.skipPromotedJobs) && jobIsPromoted) {
                             logger_1.logger.info(tag, 'Skipped because promoted');
                             metrics.skipped += 1;
                             jobIndex += 1;
@@ -253,7 +260,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                         logger_1.logger.debug(tag, 'Evaluating selectors', [
                             exports.selectors.description,
                         ]);
-                        if ((_d = query.options) === null || _d === void 0 ? void 0 : _d.descriptionFn) {
+                        if ((_e = query.options) === null || _e === void 0 ? void 0 : _e.descriptionFn) {
                             [jobDescription, jobDescriptionHTML] = yield Promise.all([
                                 page.evaluate(`(${query.options.descriptionFn.toString()})();`),
                                 page.evaluate((selector) => {
@@ -292,7 +299,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                         logger_1.logger.debug(tag, 'Evaluating selectors', [
                             exports.selectors.requiredSkills,
                         ]);
-                        if ((_e = query.options) === null || _e === void 0 ? void 0 : _e.skills) {
+                        if ((_f = query.options) === null || _f === void 0 ? void 0 : _f.skills) {
                             try {
                                 yield page.waitForSelector(exports.selectors.requiredSkills, { timeout: 2000 });
                                 jobSkills = yield page.evaluate((jobSkillsSelector) => {
@@ -320,7 +327,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                                 .replace(/[\n\r\t ]+/g, ' ').trim());
                         }, exports.selectors.insights);
                         // Apply link
-                        if ((_f = query.options) === null || _f === void 0 ? void 0 : _f.applyLink) {
+                        if ((_g = query.options) === null || _g === void 0 ? void 0 : _g.applyLink) {
                             const applyLinkRes = yield _a._extractApplyLink(page, cdpSession, tag);
                             if (applyLinkRes.success) {
                                 jobApplyLink = applyLinkRes.url;
