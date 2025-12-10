@@ -153,19 +153,16 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                             exports.selectors.place,
                             exports.selectors.date,
                         ]);
-                        const jobProbe = yield page.evaluate((jobsSelector, jobIndex) => {
+                        const jobProbe = yield page.evaluate((jobsSelector, linkSelector, jobIndex) => {
                             const job = document.querySelectorAll(jobsSelector)[jobIndex];
                             if (!job)
                                 return null;
+                            const link = job.querySelector(linkSelector);
+                            link.scrollIntoView();
                             const jobId = job.getAttribute("data-job-id");
                             return { jobId };
-                        }, exports.selectors.jobs, jobIndex);
-                        if (!jobProbe) {
-                            logger_1.logger.info(tag, 'Job element missing, skip');
-                            jobIndex += 1;
-                            continue;
-                        }
-                        if (existingJobIdsSet.has(jobProbe.jobId)) {
+                        }, exports.selectors.jobs, exports.selectors.link, jobIndex);
+                        if (jobProbe && existingJobIdsSet.has(jobProbe.jobId)) {
                             logger_1.logger.info(tag, 'Skipped because already existing');
                             metrics.skipped += 1;
                             jobIndex += 1;
