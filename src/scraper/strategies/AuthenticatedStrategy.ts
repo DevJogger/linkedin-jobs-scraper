@@ -477,23 +477,20 @@ export class AuthenticatedStrategy extends RunStrategy {
                     ]);
 
                     const jobProbe = await page.evaluate(
-                        (jobsSelector: string, jobIndex: number) => {
+                        (jobsSelector: string, linkSelector: string, jobIndex: number) => {
                             const job = document.querySelectorAll(jobsSelector)[jobIndex];
                             if (!job) return null;
+                            const link = job.querySelector(linkSelector) as HTMLElement;
+                            link.scrollIntoView();
                             const jobId = job.getAttribute("data-job-id");
                             return { jobId };
                         },
                         selectors.jobs,
+                        selectors.link,
                         jobIndex
                     );
 
-                    if (!jobProbe) {
-                        logger.info(tag, 'Job element missing, skip');
-                        jobIndex += 1;
-                        continue;
-                    }
-
-                    if (existingJobIdsSet.has(jobProbe.jobId!)) {
+                    if (jobProbe && existingJobIdsSet.has(jobProbe.jobId!)) {
                         logger.info(tag, 'Skipped because already existing');
                         metrics.skipped += 1;
                         jobIndex += 1;
