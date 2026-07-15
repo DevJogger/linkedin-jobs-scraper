@@ -334,8 +334,14 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                     catch (err) {
                         const errorMessage = `${tag}\t${err.message}`;
                         this.scraper.emit(events_1.events.scraper.error, errorMessage);
-                        jobIndex++;
                         metrics.failed++;
+                        // Detached frame means the page is in an unrecoverable state for this
+                        // jobs loop iteration. Break out and let _paginate navigate to a fresh URL.
+                        if (err.message && err.message.includes('detached Frame')) {
+                            logger_1.logger.warn(tag, 'Detached frame detected in jobs loop, breaking out to recover via pagination');
+                            break;
+                        }
+                        jobIndex++;
                         continue;
                     }
                     // Emit data (NB: should be outside of try/catch block to be properly tested)
@@ -499,9 +505,29 @@ AuthenticatedStrategy._paginate = (page_1, tag_1, ...args_1) => __awaiter(void 0
     logger_1.logger.info(tag, 'Next offset: ', offset);
     logger_1.logger.info(tag, 'Opening', url.toString());
     // Navigate new url
-    yield page.goto(url.toString(), {
-        waitUntil: 'load',
-    });
+    try {
+        yield page.goto(url.toString(), {
+            waitUntil: 'load',
+        });
+    }
+    catch (err) {
+        // Detached frame errors are transient and can occur during LinkedIn navigation;
+        // treat as a pagination failure rather than a fatal crash.
+        if (err.message && err.message.includes('detached Frame')) {
+            logger_1.logger.warn(tag, 'Detached frame on pagination, retrying after delay...');
+            try {
+                yield (0, utils_1.sleep)(2000);
+                yield page.goto(url.toString(), { waitUntil: 'load' });
+            }
+            catch (retryErr) {
+                logger_1.logger.warn(tag, 'Pagination recovery failed, stopping pagination:', retryErr.message);
+                return { success: false, error: retryErr.message };
+            }
+        }
+        else {
+            throw err;
+        }
+    }
     const pollingTime = 100;
     let elapsed = 0;
     let loaded = false;
