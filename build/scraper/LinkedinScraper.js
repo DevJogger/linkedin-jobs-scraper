@@ -43,6 +43,7 @@ class LinkedinScraper extends Scraper_1.Scraper {
         this._browser = undefined;
         // private _context: BrowserContext | undefined = undefined;
         this._state = states_1.states.notInitialized;
+        this._isConnected = false;
         /**
          * Build jobs search url
          * @param {string} query
@@ -269,12 +270,20 @@ class LinkedinScraper extends Scraper_1.Scraper {
         this.close = () => __awaiter(this, void 0, void 0, function* () {
             try {
                 if (this._browser) {
-                    this._browser.removeAllListeners() && (yield this._browser.close());
+                    this._browser.removeAllListeners();
+                    if (this._isConnected) {
+                        // Only disconnect, do not close the external browser process
+                        this._browser.disconnect();
+                    }
+                    else {
+                        yield this._browser.close();
+                    }
                 }
             }
             finally {
                 this._browser = undefined;
                 this._state = states_1.states.notInitialized;
+                this._isConnected = false;
             }
         });
         if (config_1.config.LI_AT_COOKIE) {
@@ -294,11 +303,26 @@ class LinkedinScraper extends Scraper_1.Scraper {
         return __awaiter(this, void 0, void 0, function* () {
             this._state = states_1.states.initializing;
             this._browser && this._browser.removeAllListeners();
-            const launchOptions = deepmerge_1.default.all([defaults_1.browserDefaults, this.options]);
-            logger_1.logger.info('Setting chrome launch options', launchOptions);
-            this._browser = yield puppeteer_1.default.launch(launchOptions);
-            // Close initial browser page
-            yield (yield this._browser.pages())[0].close();
+            if (this.options.browserWSEndpoint || this.options.browserURL) {
+                logger_1.logger.info('Connecting to existing browser', {
+                    browserWSEndpoint: this.options.browserWSEndpoint,
+                    browserURL: this.options.browserURL,
+                });
+                this._browser = yield puppeteer_1.default.connect({
+                    browserWSEndpoint: this.options.browserWSEndpoint,
+                    browserURL: this.options.browserURL,
+                    slowMo: this.options.slowMo,
+                });
+                this._isConnected = true;
+            }
+            else {
+                const launchOptions = deepmerge_1.default.all([defaults_1.browserDefaults, this.options]);
+                logger_1.logger.info('Setting chrome launch options', launchOptions);
+                this._browser = yield puppeteer_1.default.launch(launchOptions);
+                this._isConnected = false;
+                // Close initial browser page
+                yield (yield this._browser.pages())[0].close();
+            }
             this._browser.on(events_1.events.puppeteer.browser.disconnected, () => {
                 this.emit(events_1.events.puppeteer.browser.disconnected);
             });

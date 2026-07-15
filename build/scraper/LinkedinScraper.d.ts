@@ -10,6 +10,7 @@ declare class LinkedinScraper extends Scraper {
     private _runStrategy;
     private _browser;
     private _state;
+    private _isConnected;
     /**
      * @constructor
      * @param {ScraperOptions} options
