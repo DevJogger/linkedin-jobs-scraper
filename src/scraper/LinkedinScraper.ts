@@ -27,6 +27,7 @@ class LinkedinScraper extends Scraper {
     private _browser: Browser | undefined = undefined;
     // private _context: BrowserContext | undefined = undefined;
     private _state = states.notInitialized;
+    private _isConnected = false;
 
     /**
      * @constructor
@@ -54,12 +55,26 @@ class LinkedinScraper extends Scraper {
 
         this._browser && this._browser.removeAllListeners();
 
-        const launchOptions = deepmerge.all([browserDefaults, this.options]);
-        logger.info('Setting chrome launch options', launchOptions);
-        this._browser = await puppeteer.launch(launchOptions);
+        if (this.options.browserWSEndpoint || this.options.browserURL) {
+            logger.info('Connecting to existing browser', {
+                browserWSEndpoint: this.options.browserWSEndpoint,
+                browserURL: this.options.browserURL,
+            });
+            this._browser = await puppeteer.connect({
+                browserWSEndpoint: this.options.browserWSEndpoint,
+                browserURL: this.options.browserURL,
+                slowMo: this.options.slowMo,
+            });
+            this._isConnected = true;
+        } else {
+            const launchOptions = deepmerge.all([browserDefaults, this.options]);
+            logger.info('Setting chrome launch options', launchOptions);
+            this._browser = await puppeteer.launch(launchOptions);
+            this._isConnected = false;
 
-        // Close initial browser page
-        await (await this._browser.pages())[0].close();
+            // Close initial browser page
+            await (await this._browser.pages())[0].close();
+        }
 
         this._browser.on(events.puppeteer.browser.disconnected, () => {
             this.emit(events.puppeteer.browser.disconnected);
@@ -375,12 +390,19 @@ class LinkedinScraper extends Scraper {
     public close = async (): Promise<void> => {
         try {
             if (this._browser) {
-                this._browser.removeAllListeners() && await this._browser.close();
+                this._browser.removeAllListeners();
+                if (this._isConnected) {
+                    // Only disconnect, do not close the external browser process
+                    this._browser.disconnect();
+                } else {
+                    await this._browser.close();
+                }
             }
         }
         finally {
             this._browser = undefined;
             this._state = states.notInitialized;
+            this._isConnected = false;
         }
     };
 }
