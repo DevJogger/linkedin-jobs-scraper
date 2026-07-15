@@ -170,9 +170,28 @@ export class AuthenticatedStrategy extends RunStrategy {
         logger.info(tag, 'Opening', url.toString());
 
         // Navigate new url
-        await page.goto(url.toString(), {
-            waitUntil: 'load',
-        });
+        try {
+            await page.goto(url.toString(), {
+                waitUntil: 'load',
+            });
+        }
+        catch (err: any) {
+            // Detached frame errors are transient and can occur during LinkedIn navigation;
+            // treat as a pagination failure rather than a fatal crash.
+            if (err.message && err.message.includes('detached Frame')) {
+                logger.warn(tag, 'Detached frame on pagination, retrying after delay...');
+                try {
+                    await sleep(2000);
+                    await page.goto(url.toString(), { waitUntil: 'load' });
+                }
+                catch (retryErr: any) {
+                    logger.warn(tag, 'Pagination recovery failed, stopping pagination:', retryErr.message);
+                    return { success: false, error: retryErr.message };
+                }
+            } else {
+                throw err;
+            }
+        }
 
         const pollingTime = 100;
         let elapsed = 0;
@@ -719,8 +738,16 @@ export class AuthenticatedStrategy extends RunStrategy {
                 catch(err: any) {
                     const errorMessage = `${tag}\t${err.message}`;
                     this.scraper.emit(events.scraper.error, errorMessage);
-                    jobIndex++;
                     metrics.failed++;
+
+                    // Detached frame means the page is in an unrecoverable state for this
+                    // jobs loop iteration. Break out and let _paginate navigate to a fresh URL.
+                    if (err.message && err.message.includes('detached Frame')) {
+                        logger.warn(tag, 'Detached frame detected in jobs loop, breaking out to recover via pagination');
+                        break;
+                    }
+
+                    jobIndex++;
                     continue;
                 }
 
