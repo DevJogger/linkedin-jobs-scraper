@@ -176,21 +176,9 @@ export class AuthenticatedStrategy extends RunStrategy {
             });
         }
         catch (err: any) {
-            // Detached frame errors are transient and can occur during LinkedIn navigation;
-            // treat as a pagination failure rather than a fatal crash.
-            if (err.message && err.message.includes('detached Frame')) {
-                logger.warn(tag, 'Detached frame on pagination, retrying after delay...');
-                try {
-                    await sleep(2000);
-                    await page.goto(url.toString(), { waitUntil: 'load' });
-                }
-                catch (retryErr: any) {
-                    logger.warn(tag, 'Pagination recovery failed, stopping pagination:', retryErr.message);
-                    return { success: false, error: retryErr.message };
-                }
-            } else {
-                throw err;
-            }
+            // Any navigation error during pagination stops pagination gracefully
+            logger.warn(tag, 'Navigation error during pagination, stopping:', err.message);
+            return { success: false, error: err.message };
         }
 
         const pollingTime = 100;
@@ -636,6 +624,18 @@ export class AuthenticatedStrategy extends RunStrategy {
                     // Check if loading job details has failed
                     if (!loadDetailsResult.success) {
                         logger.error(tag, loadDetailsResult.error);
+
+                        // Proactively check if the page frame is still usable.
+                        // _loadJobDetails silently swallows detached frame errors, so the frame
+                        // may already be broken by the time we get here.
+                        try {
+                            await page.evaluate(() => true);
+                        }
+                        catch (frameErr: any) {
+                            logger.warn(tag, 'Frame is detached after job detail timeout, stopping jobs loop:', frameErr.message);
+                            break;
+                        }
+
                         jobIndex += 1;
                         continue;
                     }
