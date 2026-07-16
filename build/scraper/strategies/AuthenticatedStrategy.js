@@ -250,6 +250,16 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                         // Check if loading job details has failed
                         if (!loadDetailsResult.success) {
                             logger_1.logger.error(tag, loadDetailsResult.error);
+                            // Proactively check if the page frame is still usable.
+                            // _loadJobDetails silently swallows detached frame errors, so the frame
+                            // may already be broken by the time we get here.
+                            try {
+                                yield page.evaluate(() => true);
+                            }
+                            catch (frameErr) {
+                                logger_1.logger.warn(tag, 'Frame is detached after job detail timeout, stopping jobs loop:', frameErr.message);
+                                break;
+                            }
                             jobIndex += 1;
                             continue;
                         }
@@ -511,22 +521,9 @@ AuthenticatedStrategy._paginate = (page_1, tag_1, ...args_1) => __awaiter(void 0
         });
     }
     catch (err) {
-        // Detached frame errors are transient and can occur during LinkedIn navigation;
-        // treat as a pagination failure rather than a fatal crash.
-        if (err.message && err.message.includes('detached Frame')) {
-            logger_1.logger.warn(tag, 'Detached frame on pagination, retrying after delay...');
-            try {
-                yield (0, utils_1.sleep)(2000);
-                yield page.goto(url.toString(), { waitUntil: 'load' });
-            }
-            catch (retryErr) {
-                logger_1.logger.warn(tag, 'Pagination recovery failed, stopping pagination:', retryErr.message);
-                return { success: false, error: retryErr.message };
-            }
-        }
-        else {
-            throw err;
-        }
+        // Any navigation error during pagination stops pagination gracefully
+        logger_1.logger.warn(tag, 'Navigation error during pagination, stopping:', err.message);
+        return { success: false, error: err.message };
     }
     const pollingTime = 100;
     let elapsed = 0;
