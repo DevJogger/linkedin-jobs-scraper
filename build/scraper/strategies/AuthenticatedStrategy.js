@@ -246,7 +246,7 @@ class AuthenticatedStrategy extends RunStrategy_1.RunStrategy {
                         logger_1.logger.debug(tag, 'Evaluating selectors', [
                             exports.selectors.jobs,
                         ]);
-                        loadDetailsResult = yield _a._loadJobDetails(page, jobId);
+                        loadDetailsResult = yield _a._loadJobDetails(page, jobId, 5000);
                         // Check if loading job details has failed
                         if (!loadDetailsResult.success) {
                             logger_1.logger.error(tag, loadDetailsResult.error);
