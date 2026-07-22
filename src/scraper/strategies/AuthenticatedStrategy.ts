@@ -619,7 +619,7 @@ export class AuthenticatedStrategy extends RunStrategy {
                         selectors.jobs,
                     ]);
 
-                    loadDetailsResult = await AuthenticatedStrategy._loadJobDetails(page, jobId!);
+                    loadDetailsResult = await AuthenticatedStrategy._loadJobDetails(page, jobId!, 5000);
 
                     // Check if loading job details has failed
                     if (!loadDetailsResult.success) {
